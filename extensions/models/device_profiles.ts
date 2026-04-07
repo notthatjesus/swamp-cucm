@@ -204,7 +204,7 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/device-profile",
-  version: "2026.04.07.2",
+  version: "2026.04.07.3",
   globalArguments: GlobalArgsSchema,
   resources: {
     deviceProfiles: {
