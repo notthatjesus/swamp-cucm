@@ -1,6 +1,6 @@
 import { z } from "npm:zod@4";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
-import { fetch, Agent } from "npm:undici@5.28.4";
+import { Agent, fetch } from "npm:undici@5.28.4";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -94,7 +94,9 @@ function basicAuth(username: string, password: string) {
 /** Normalize an XFkType value from fast-xml-parser output.
  *  Wire format: <routePartitionName uuid="{u}">Name</routePartitionName>
  *  Parsed as:   { "#text": "Name", "@_uuid": "{u}" }  or just "Name" */
-function normalizeFk(v: unknown): { name: string | null; uuid: string | null } | null {
+function normalizeFk(
+  v: unknown,
+): { name: string | null; uuid: string | null } | null {
   if (v === null || v === undefined) return null;
   if (typeof v === "string") return { name: v || null, uuid: null };
   if (typeof v === "object") {
@@ -151,7 +153,9 @@ async function soapRequest(
   bodyInner: string,
 ): Promise<Record<string, unknown>> {
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${axlNs(version)}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${
+    axlNs(version)
+  }" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <soapenv:Header/>
   <soapenv:Body>
 ${bodyInner}
@@ -173,8 +177,7 @@ ${bodyInner}
 
   if (!res.ok) {
     const parsed = XML_PARSER.parse(text);
-    const fault =
-      parsed?.Envelope?.Body?.Fault?.faultstring ??
+    const fault = parsed?.Envelope?.Body?.Fault?.faultstring ??
       parsed?.Envelope?.Body?.Fault?.detail?.axlError?.axlmessage ??
       text;
     throw new Error(`AXL ${action} failed (HTTP ${res.status}): ${fault}`);
@@ -185,10 +188,16 @@ ${bodyInner}
 
 /** Discover AXL version from CUCM via getCCMVersion */
 async function discoverVersion(host: string, auth: string): Promise<string> {
-  const parsed = await soapRequest(host, auth, "15.0", "getCCMVersion", `    <axl:getCCMVersion/>`);
+  const parsed = await soapRequest(
+    host,
+    auth,
+    "15.0",
+    "getCCMVersion",
+    `    <axl:getCCMVersion/>`,
+  );
 
-  const versionStr =
-    parsed?.Envelope?.Body?.getCCMVersionResponse?.return?.componentVersion?.version;
+  const versionStr = parsed?.Envelope?.Body?.getCCMVersionResponse?.return
+    ?.componentVersion?.version;
 
   if (typeof versionStr !== "string" || !versionStr) {
     throw new Error("getCCMVersion returned no version string");
@@ -201,7 +210,10 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 }
 
 /** Build an instance name for getLine storage: "pattern@partition" or just "pattern" */
-function lineInstanceName(pattern: string, routePartitionName?: string | null): string {
+function lineInstanceName(
+  pattern: string,
+  routePartitionName?: string | null,
+): string {
   return routePartitionName ? `${pattern}@${routePartitionName}` : pattern;
 }
 
@@ -209,7 +221,7 @@ function lineInstanceName(pattern: string, routePartitionName?: string | null): 
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/line",
-  version: "2026.04.06.1",
+  version: "2026.04.07.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     lines: {
@@ -219,7 +231,8 @@ export const model = {
       garbageCollection: 10,
     },
     line: {
-      description: "Full line detail returned by getLine, keyed by pattern[@partition]",
+      description:
+        "Full line detail returned by getLine, keyed by pattern[@partition]",
       schema: LineDetailSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -242,15 +255,23 @@ export const model = {
         returnedTags: z
           .array(z.string())
           .default(DEFAULT_RETURNED_TAGS)
-          .describe("LLine fields to return. Defaults to a practical core set."),
-        skip: z.number().int().nonnegative().optional().describe("Pagination offset"),
-        first: z.number().int().positive().optional().describe("Max records to return"),
+          .describe(
+            "LLine fields to return. Defaults to a practical core set.",
+          ),
+        skip: z.number().int().nonnegative().optional().describe(
+          "Pagination offset",
+        ),
+        first: z.number().int().positive().optional().describe(
+          "Max records to return",
+        ),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
 
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { searchCriteria, returnedTags, skip, first } = args;
@@ -285,12 +306,20 @@ ${tagsLines}
 ${paginationLines}
     </axl:listLine>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "listLine", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "listLine",
+          bodyInner,
+        );
 
         const lines: unknown[] =
           parsed?.Envelope?.Body?.listLineResponse?.return?.line ?? [];
 
-        const normalized = (lines as Record<string, unknown>[]).map(normalizeLine);
+        const normalized = (lines as Record<string, unknown>[]).map(
+          normalizeLine,
+        );
 
         context.logger.info(`listLine returned ${normalized.length} lines`);
 
@@ -319,9 +348,11 @@ ${paginationLines}
         message: "Either pattern or uuid is required",
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         let lookup: string;
@@ -329,14 +360,24 @@ ${paginationLines}
           lookup = `      <uuid>${args.uuid}</uuid>`;
         } else {
           lookup = `      <pattern>${args.pattern}</pattern>
-      <routePartitionName${args.routePartitionName ? `>${args.routePartitionName}</routePartitionName` : ` xsi:nil="true"/`}>`;
+      <routePartitionName${
+            args.routePartitionName
+              ? `>${args.routePartitionName}</routePartitionName`
+              : ` xsi:nil="true"/`
+          }>`;
         }
 
         const bodyInner = `    <axl:getLine sequence="1">
 ${lookup}
     </axl:getLine>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "getLine", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "getLine",
+          bodyInner,
+        );
 
         const raw = parsed?.Envelope?.Body?.getLineResponse?.return?.line;
         if (!raw || typeof raw !== "object") {
@@ -345,7 +386,9 @@ ${lookup}
 
         const line = normalizeLine(raw as Record<string, unknown>);
         const pattern = (line.pattern as string) ?? args.pattern ?? "unknown";
-        const partition = (line.routePartitionName as { name: string | null } | null)?.name ?? args.routePartitionName ?? null;
+        const partition =
+          (line.routePartitionName as { name: string | null } | null)?.name ??
+            args.routePartitionName ?? null;
         const instanceName = lineInstanceName(pattern, partition);
 
         context.logger.info(`getLine returned line "${instanceName}"`);
@@ -363,7 +406,9 @@ ${lookup}
         usage: z
           .string()
           .default("Device")
-          .describe("Pattern usage: 'Device', 'Translation', 'Hunt Pilot', etc."),
+          .describe(
+            "Pattern usage: 'Device', 'Translation', 'Hunt Pilot', etc.",
+          ),
         routePartitionName: z
           .string()
           .nullable()
@@ -371,21 +416,33 @@ ${lookup}
           .describe("Route partition name (null for none)"),
         // Commonly configured optional fields
         description: z.string().optional().describe("Description of this DN"),
-        alertingName: z.string().optional().describe("Alerting name (caller ID)"),
-        asciiAlertingName: z.string().optional().describe("ASCII alerting name"),
+        alertingName: z.string().optional().describe(
+          "Alerting name (caller ID)",
+        ),
+        asciiAlertingName: z.string().optional().describe(
+          "ASCII alerting name",
+        ),
         presenceGroupName: z.string().optional().describe("Presence group"),
-        shareLineAppearanceCssName: z.string().nullable().optional().describe("Shared line CSS"),
-        voiceMailProfileName: z.string().nullable().optional().describe("Voice mail profile"),
+        shareLineAppearanceCssName: z.string().nullable().optional().describe(
+          "Shared line CSS",
+        ),
+        voiceMailProfileName: z.string().nullable().optional().describe(
+          "Voice mail profile",
+        ),
         autoAnswer: z
           .string()
           .optional()
-          .describe("Auto answer: 'Auto Answer Off', 'Auto Answer with Headset', etc."),
+          .describe(
+            "Auto answer: 'Auto Answer Off', 'Auto Answer with Headset', etc.",
+          ),
         active: z.boolean().optional().describe("Whether the line is active"),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         // Helper: build a nullable FK element
@@ -415,10 +472,16 @@ ${args.active !== undefined ? `        <active>${args.active}</active>` : ""}
       </line>
     </axl:addLine>`;
 
-        const result = await soapRequest(host, auth, axlVersion, "addLine", bodyInner);
+        const result = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "addLine",
+          bodyInner,
+        );
         const newUuid =
           result?.Envelope?.Body?.addLineResponse?.return?.["#text"] ??
-          result?.Envelope?.Body?.addLineResponse?.return;
+            result?.Envelope?.Body?.addLineResponse?.return;
         context.logger.info(
           `addLine created line "${args.pattern}" with UUID ${newUuid}`,
         );
@@ -426,7 +489,9 @@ ${args.active !== undefined ? `        <active>${args.active}</active>` : ""}
         // Fetch and store the full line record
         const partition = args.routePartitionName;
         const refreshLookup = `      <pattern>${args.pattern}</pattern>
-      <routePartitionName${partition ? `>${partition}</routePartitionName` : ` xsi:nil="true"/`}>`;
+      <routePartitionName${
+          partition ? `>${partition}</routePartitionName` : ` xsi:nil="true"/`
+        }>`;
 
         const refreshed = await soapRequest(
           host,
@@ -475,9 +540,11 @@ ${args.active !== undefined ? `        <active>${args.active}</active>` : ""}
           message: "Either pattern or uuid is required",
         }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const {
@@ -495,12 +562,18 @@ ${args.active !== undefined ? `        <active>${args.active}</active>` : ""}
           lookup = `      <uuid>${uuid}</uuid>`;
         } else {
           lookup = `      <pattern>${pattern}</pattern>
-      <routePartitionName${routePartitionName ? `>${routePartitionName}</routePartitionName` : ` xsi:nil="true"/`}>`;
+      <routePartitionName${
+            routePartitionName
+              ? `>${routePartitionName}</routePartitionName`
+              : ` xsi:nil="true"/`
+          }>`;
         }
 
         // Optional rename fields
         const renameLines = [
-          newPattern !== undefined ? `      <newPattern>${newPattern}</newPattern>` : "",
+          newPattern !== undefined
+            ? `      <newPattern>${newPattern}</newPattern>`
+            : "",
           newRoutePartitionName !== undefined
             ? newRoutePartitionName === null
               ? `      <newRoutePartitionName xsi:nil="true"/>`
@@ -530,13 +603,18 @@ ${fieldLines}
 
         // Determine lookup for refresh
         const refreshPattern = newPattern ?? pattern;
-        const refreshPartition =
-          newRoutePartitionName !== undefined ? newRoutePartitionName : routePartitionName;
+        const refreshPartition = newRoutePartitionName !== undefined
+          ? newRoutePartitionName
+          : routePartitionName;
 
         let refreshLookup: string;
         if (refreshPattern) {
           refreshLookup = `      <pattern>${refreshPattern}</pattern>
-      <routePartitionName${refreshPartition ? `>${refreshPartition}</routePartitionName` : ` xsi:nil="true"/`}>`;
+      <routePartitionName${
+            refreshPartition
+              ? `>${refreshPartition}</routePartitionName`
+              : ` xsi:nil="true"/`
+          }>`;
         } else {
           refreshLookup = `      <uuid>${uuid}</uuid>`;
         }
@@ -551,14 +629,17 @@ ${fieldLines}
 
         const raw = refreshed?.Envelope?.Body?.getLineResponse?.return?.line;
         const line = normalizeLine((raw ?? {}) as Record<string, unknown>);
-        const finalPattern = (line.pattern as string) ?? refreshPattern ?? "unknown";
+        const finalPattern = (line.pattern as string) ?? refreshPattern ??
+          "unknown";
         const finalPartition =
           (line.routePartitionName as { name: string | null } | null)?.name ??
-          refreshPartition ??
-          null;
+            refreshPartition ??
+            null;
         const instanceName = lineInstanceName(finalPattern, finalPartition);
 
-        context.logger.info(`updateLine succeeded, refreshed "${instanceName}"`);
+        context.logger.info(
+          `updateLine succeeded, refreshed "${instanceName}"`,
+        );
 
         const handle = await context.writeResource("line", instanceName, line);
         return { dataHandles: [handle] };
@@ -566,7 +647,8 @@ ${fieldLines}
     },
 
     removeLine: {
-      description: "Remove a directory number from CUCM by pattern+partition or UUID.",
+      description:
+        "Remove a directory number from CUCM by pattern+partition or UUID.",
       arguments: z
         .object({
           pattern: z.string().optional().describe("DN pattern (e.g. '1001')"),
@@ -581,9 +663,11 @@ ${fieldLines}
           message: "Either pattern or uuid is required",
         }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         let lookup: string;
@@ -591,7 +675,11 @@ ${fieldLines}
           lookup = `      <uuid>${args.uuid}</uuid>`;
         } else {
           lookup = `      <pattern>${args.pattern}</pattern>
-      <routePartitionName${args.routePartitionName ? `>${args.routePartitionName}</routePartitionName` : ` xsi:nil="true"/`}>`;
+      <routePartitionName${
+            args.routePartitionName
+              ? `>${args.routePartitionName}</routePartitionName`
+              : ` xsi:nil="true"/`
+          }>`;
         }
 
         const bodyInner = `    <axl:removeLine sequence="1">
@@ -600,7 +688,9 @@ ${lookup}
 
         await soapRequest(host, auth, axlVersion, "removeLine", bodyInner);
 
-        context.logger.info(`removeLine deleted "${args.pattern ?? args.uuid}"`);
+        context.logger.info(
+          `removeLine deleted "${args.pattern ?? args.uuid}"`,
+        );
         return { dataHandles: [] };
       },
     },

@@ -1,6 +1,6 @@
 import { z } from "npm:zod@4";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
-import { fetch, Agent } from "npm:undici@5.28.4";
+import { Agent, fetch } from "npm:undici@5.28.4";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,8 @@ const DeviceProfileDetailSchema = z
     phoneTemplateName: FkSchema.optional(),
     softkeyTemplateName: FkSchema.optional(),
     loginUserId: FkSchema.optional(),
-    lines: z.union([z.object({ line: z.array(PhoneLineSchema) }), z.string()]).optional(),
+    lines: z.union([z.object({ line: z.array(PhoneLineSchema) }), z.string()])
+      .optional(),
   })
   .passthrough();
 
@@ -93,7 +94,9 @@ function basicAuth(username: string, password: string) {
   return `Basic ${btoa(`${username}:${password}`)}`;
 }
 
-function normalizeFk(v: unknown): { name: string | null; uuid: string | null } | null {
+function normalizeFk(
+  v: unknown,
+): { name: string | null; uuid: string | null } | null {
   if (v === null || v === undefined) return null;
   if (typeof v === "string") return { name: v || null, uuid: null };
   if (typeof v === "object") {
@@ -113,7 +116,9 @@ const FK_FIELDS = new Set([
   "featureControlPolicy",
 ]);
 
-function normalizeDeviceProfile(raw: Record<string, unknown>): Record<string, unknown> {
+function normalizeDeviceProfile(
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
   const { "@_uuid": uuid, "@_ctiid": ctiid, ...fields } = raw;
   const result: Record<string, unknown> = { uuid, ctiid };
 
@@ -144,7 +149,9 @@ async function soapRequest(
   bodyInner: string,
 ): Promise<Record<string, unknown>> {
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${axlNs(version)}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${
+    axlNs(version)
+  }" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <soapenv:Header/>
   <soapenv:Body>
 ${bodyInner}
@@ -166,8 +173,7 @@ ${bodyInner}
 
   if (!res.ok) {
     const parsed = XML_PARSER.parse(text);
-    const fault =
-      parsed?.Envelope?.Body?.Fault?.faultstring ??
+    const fault = parsed?.Envelope?.Body?.Fault?.faultstring ??
       parsed?.Envelope?.Body?.Fault?.detail?.axlError?.axlmessage ??
       text;
     throw new Error(`AXL ${action} failed (HTTP ${res.status}): ${fault}`);
@@ -177,9 +183,15 @@ ${bodyInner}
 }
 
 async function discoverVersion(host: string, auth: string): Promise<string> {
-  const parsed = await soapRequest(host, auth, "15.0", "getCCMVersion", `    <axl:getCCMVersion/>`);
-  const versionStr =
-    parsed?.Envelope?.Body?.getCCMVersionResponse?.return?.componentVersion?.version;
+  const parsed = await soapRequest(
+    host,
+    auth,
+    "15.0",
+    "getCCMVersion",
+    `    <axl:getCCMVersion/>`,
+  );
+  const versionStr = parsed?.Envelope?.Body?.getCCMVersionResponse?.return
+    ?.componentVersion?.version;
   if (typeof versionStr !== "string" || !versionStr) {
     throw new Error("getCCMVersion returned no version string");
   }
@@ -192,7 +204,7 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/device-profile",
-  version: "2026.04.06.1",
+  version: "2026.04.07.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     deviceProfiles: {
@@ -202,7 +214,8 @@ export const model = {
       garbageCollection: 10,
     },
     deviceProfile: {
-      description: "Full device profile detail returned by getDeviceProfile, keyed by name",
+      description:
+        "Full device profile detail returned by getDeviceProfile, keyed by name",
       schema: DeviceProfileDetailSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -228,9 +241,11 @@ export const model = {
         first: z.number().int().positive().optional(),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { searchCriteria, returnedTags, skip, first } = args;
@@ -263,13 +278,24 @@ ${tagsLines}
 ${paginationLines}
     </axl:listDeviceProfile>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "listDeviceProfile", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "listDeviceProfile",
+          bodyInner,
+        );
 
         const profiles: unknown[] =
-          parsed?.Envelope?.Body?.listDeviceProfileResponse?.return?.deviceProfile ?? [];
+          parsed?.Envelope?.Body?.listDeviceProfileResponse?.return
+            ?.deviceProfile ?? [];
 
-        const normalized = (profiles as Record<string, unknown>[]).map(normalizeDeviceProfile);
-        context.logger.info(`listDeviceProfile returned ${normalized.length} profiles`);
+        const normalized = (profiles as Record<string, unknown>[]).map(
+          normalizeDeviceProfile,
+        );
+        context.logger.info(
+          `listDeviceProfile returned ${normalized.length} profiles`,
+        );
 
         const handle = await context.writeResource("deviceProfiles", "main", {
           axlVersion,
@@ -286,11 +312,15 @@ ${paginationLines}
       arguments: z.object({
         name: z.string().optional().describe("Device profile name"),
         uuid: z.string().optional().describe("Device profile UUID"),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const lookup = args.name
@@ -301,19 +331,31 @@ ${paginationLines}
 ${lookup}
     </axl:getDeviceProfile>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "getDeviceProfile", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "getDeviceProfile",
+          bodyInner,
+        );
 
-        const raw = parsed?.Envelope?.Body?.getDeviceProfileResponse?.return?.deviceProfile;
+        const raw = parsed?.Envelope?.Body?.getDeviceProfileResponse?.return
+          ?.deviceProfile;
         if (!raw || typeof raw !== "object") {
           throw new Error("getDeviceProfile returned no deviceProfile object");
         }
 
         const profile = normalizeDeviceProfile(raw as Record<string, unknown>);
-        const instanceName = (profile.name as string) ?? args.name ?? args.uuid ?? "unknown";
+        const instanceName = (profile.name as string) ?? args.name ??
+          args.uuid ?? "unknown";
 
         context.logger.info(`getDeviceProfile returned "${instanceName}"`);
 
-        const handle = await context.writeResource("deviceProfile", instanceName, profile);
+        const handle = await context.writeResource(
+          "deviceProfile",
+          instanceName,
+          profile,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -323,7 +365,9 @@ ${lookup}
       arguments: z.object({
         name: z.string().describe("Device profile name"),
         product: z.string().describe("Product type (e.g. 'Cisco 8861')"),
-        class: z.string().default("Device Profile").describe("Device class — almost always 'Device Profile'"),
+        class: z.string().default("Device Profile").describe(
+          "Device class — almost always 'Device Profile'",
+        ),
         protocol: z.string().describe("Protocol: 'SIP' or 'SCCP'"),
         protocolSide: z.string().default("User"),
         phoneTemplateName: z.string().describe("Phone button template name"),
@@ -342,9 +386,11 @@ ${lookup}
         })).optional().describe("Lines to assign to the profile"),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const fkEl = (tag: string, value: string | null | undefined) => {
@@ -355,56 +401,99 @@ ${lookup}
 
         const linesXml = args.lines && args.lines.length > 0
           ? `        <lines>
-${args.lines.map((l) => `          <line>
+${
+            args.lines.map((l) =>
+              `          <line>
             <index>${l.index}</index>
-${l.label !== undefined ? `            <label>${l.label}</label>` : ""}
+${
+                l.label !== undefined
+                  ? `            <label>${l.label}</label>`
+                  : ""
+              }
 ${l.display !== undefined ? `            <display>${l.display}</display>` : ""}
-${l.displayAscii !== undefined ? `            <displayAscii>${l.displayAscii}</displayAscii>` : ""}
+${
+                l.displayAscii !== undefined
+                  ? `            <displayAscii>${l.displayAscii}</displayAscii>`
+                  : ""
+              }
             <dirn>
               <pattern>${l.pattern}</pattern>
-              ${l.routePartitionName ? `<routePartitionName>${l.routePartitionName}</routePartitionName>` : `<routePartitionName xsi:nil="true"/>`}
+              ${
+                l.routePartitionName
+                  ? `<routePartitionName>${l.routePartitionName}</routePartitionName>`
+                  : `<routePartitionName xsi:nil="true"/>`
+              }
             </dirn>
             <maxNumCalls>${l.maxNumCalls}</maxNumCalls>
             <busyTrigger>${l.busyTrigger}</busyTrigger>
-          </line>`).join("\n")}
+          </line>`
+            ).join("\n")
+          }
         </lines>`
           : "";
 
         const bodyInner = `    <axl:addDeviceProfile sequence="1">
       <deviceProfile>
         <name>${args.name}</name>
-${args.description !== undefined ? `        <description>${args.description}</description>` : ""}
+${
+          args.description !== undefined
+            ? `        <description>${args.description}</description>`
+            : ""
+        }
         <product>${args.product}</product>
         <class>${args.class}</class>
         <protocol>${args.protocol}</protocol>
         <protocolSide>${args.protocolSide}</protocolSide>
         <phoneTemplateName>${args.phoneTemplateName}</phoneTemplateName>
 ${fkEl("softkeyTemplateName", args.softkeyTemplateName)}
-${args.userLocale !== undefined ? `        <userLocale>${args.userLocale}</userLocale>` : ""}
+${
+          args.userLocale !== undefined
+            ? `        <userLocale>${args.userLocale}</userLocale>`
+            : ""
+        }
 ${linesXml}
       </deviceProfile>
     </axl:addDeviceProfile>`;
 
-        const result = await soapRequest(host, auth, axlVersion, "addDeviceProfile", bodyInner);
+        const result = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "addDeviceProfile",
+          bodyInner,
+        );
         const newUuid =
           result?.Envelope?.Body?.addDeviceProfileResponse?.return?.["#text"] ??
-          result?.Envelope?.Body?.addDeviceProfileResponse?.return;
-        context.logger.info(`addDeviceProfile created "${args.name}" with UUID ${newUuid}`);
+            result?.Envelope?.Body?.addDeviceProfileResponse?.return;
+        context.logger.info(
+          `addDeviceProfile created "${args.name}" with UUID ${newUuid}`,
+        );
 
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getDeviceProfile",
+          host,
+          auth,
+          axlVersion,
+          "getDeviceProfile",
           `    <axl:getDeviceProfile sequence="1">\n      <name>${args.name}</name>\n    </axl:getDeviceProfile>`,
         );
-        const raw = refreshed?.Envelope?.Body?.getDeviceProfileResponse?.return?.deviceProfile;
-        const profile = normalizeDeviceProfile((raw ?? {}) as Record<string, unknown>);
+        const raw = refreshed?.Envelope?.Body?.getDeviceProfileResponse?.return
+          ?.deviceProfile;
+        const profile = normalizeDeviceProfile(
+          (raw ?? {}) as Record<string, unknown>,
+        );
 
-        const handle = await context.writeResource("deviceProfile", args.name, profile);
+        const handle = await context.writeResource(
+          "deviceProfile",
+          args.name,
+          profile,
+        );
         return { dataHandles: [handle] };
       },
     },
 
     updateDeviceProfile: {
-      description: "Update a device profile in CUCM. Only provided fields are updated.",
+      description:
+        "Update a device profile in CUCM. Only provided fields are updated.",
       arguments: z.object({
         name: z.string().optional().describe("Current device profile name"),
         uuid: z.string().optional().describe("Device profile UUID"),
@@ -413,11 +502,15 @@ ${linesXml}
         phoneTemplateName: z.string().optional(),
         softkeyTemplateName: z.string().nullable().optional(),
         userLocale: z.string().nullable().optional(),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { name, uuid, newName, ...fields } = args;
@@ -442,7 +535,13 @@ ${renameLine}
 ${fieldLines}
     </axl:updateDeviceProfile>`;
 
-        await soapRequest(host, auth, axlVersion, "updateDeviceProfile", bodyInner);
+        await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "updateDeviceProfile",
+          bodyInner,
+        );
 
         const refreshName = newName ?? name;
         const refreshLookup = refreshName
@@ -450,17 +549,30 @@ ${fieldLines}
           : `      <uuid>${uuid}</uuid>`;
 
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getDeviceProfile",
+          host,
+          auth,
+          axlVersion,
+          "getDeviceProfile",
           `    <axl:getDeviceProfile sequence="1">\n${refreshLookup}\n    </axl:getDeviceProfile>`,
         );
 
-        const raw = refreshed?.Envelope?.Body?.getDeviceProfileResponse?.return?.deviceProfile;
-        const profile = normalizeDeviceProfile((raw ?? {}) as Record<string, unknown>);
-        const instanceName = (profile.name as string) ?? refreshName ?? "unknown";
+        const raw = refreshed?.Envelope?.Body?.getDeviceProfileResponse?.return
+          ?.deviceProfile;
+        const profile = normalizeDeviceProfile(
+          (raw ?? {}) as Record<string, unknown>,
+        );
+        const instanceName = (profile.name as string) ?? refreshName ??
+          "unknown";
 
-        context.logger.info(`updateDeviceProfile succeeded, refreshed "${instanceName}"`);
+        context.logger.info(
+          `updateDeviceProfile succeeded, refreshed "${instanceName}"`,
+        );
 
-        const handle = await context.writeResource("deviceProfile", instanceName, profile);
+        const handle = await context.writeResource(
+          "deviceProfile",
+          instanceName,
+          profile,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -470,11 +582,15 @@ ${fieldLines}
       arguments: z.object({
         name: z.string().optional().describe("Device profile name"),
         uuid: z.string().optional().describe("Device profile UUID"),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const lookup = args.name
@@ -485,9 +601,17 @@ ${fieldLines}
 ${lookup}
     </axl:removeDeviceProfile>`;
 
-        await soapRequest(host, auth, axlVersion, "removeDeviceProfile", bodyInner);
+        await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "removeDeviceProfile",
+          bodyInner,
+        );
 
-        context.logger.info(`removeDeviceProfile deleted "${args.name ?? args.uuid}"`);
+        context.logger.info(
+          `removeDeviceProfile deleted "${args.name ?? args.uuid}"`,
+        );
         return { dataHandles: [] };
       },
     },

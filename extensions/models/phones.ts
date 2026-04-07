@@ -1,6 +1,6 @@
 import { z } from "npm:zod@4";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
-import { fetch, Agent } from "npm:undici@5.28.4";
+import { Agent, fetch } from "npm:undici@5.28.4";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -81,7 +81,8 @@ const PhoneDetailSchema = z
     isActive: z.boolean().optional(),
     enableExtensionMobility: z.boolean().optional(),
     allowCtiControlFlag: z.boolean().optional(),
-    lines: z.union([z.object({ line: z.array(PhoneLineSchema) }), z.string()]).optional(),
+    lines: z.union([z.object({ line: z.array(PhoneLineSchema) }), z.string()])
+      .optional(),
   })
   .passthrough();
 
@@ -133,7 +134,9 @@ function basicAuth(username: string, password: string) {
 /** Normalize an XFkType value from fast-xml-parser output.
  *  Wire format: <devicePoolName uuid="{u}">Name</devicePoolName>
  *  Parsed as:   { "#text": "Name", "@_uuid": "{u}" }  or just "Name" */
-function normalizeFk(v: unknown): { name: string | null; uuid: string | null } | null {
+function normalizeFk(
+  v: unknown,
+): { name: string | null; uuid: string | null } | null {
   if (v === null || v === undefined) return null;
   if (typeof v === "string") return { name: v || null, uuid: null };
   if (typeof v === "object") {
@@ -208,7 +211,9 @@ async function soapRequest(
   bodyInner: string,
 ): Promise<Record<string, unknown>> {
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${axlNs(version)}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${
+    axlNs(version)
+  }" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <soapenv:Header/>
   <soapenv:Body>
 ${bodyInner}
@@ -230,8 +235,7 @@ ${bodyInner}
 
   if (!res.ok) {
     const parsed = XML_PARSER.parse(text);
-    const fault =
-      parsed?.Envelope?.Body?.Fault?.faultstring ??
+    const fault = parsed?.Envelope?.Body?.Fault?.faultstring ??
       parsed?.Envelope?.Body?.Fault?.detail?.axlError?.axlmessage ??
       text;
     throw new Error(`AXL ${action} failed (HTTP ${res.status}): ${fault}`);
@@ -242,10 +246,16 @@ ${bodyInner}
 
 /** Discover AXL version from CUCM via getCCMVersion */
 async function discoverVersion(host: string, auth: string): Promise<string> {
-  const parsed = await soapRequest(host, auth, "15.0", "getCCMVersion", `    <axl:getCCMVersion/>`);
+  const parsed = await soapRequest(
+    host,
+    auth,
+    "15.0",
+    "getCCMVersion",
+    `    <axl:getCCMVersion/>`,
+  );
 
-  const versionStr =
-    parsed?.Envelope?.Body?.getCCMVersionResponse?.return?.componentVersion?.version;
+  const versionStr = parsed?.Envelope?.Body?.getCCMVersionResponse?.return
+    ?.componentVersion?.version;
 
   if (typeof versionStr !== "string" || !versionStr) {
     throw new Error("getCCMVersion returned no version string");
@@ -261,7 +271,7 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/phone",
-  version: "2026.04.06.1",
+  version: "2026.04.07.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     phones: {
@@ -271,7 +281,8 @@ export const model = {
       garbageCollection: 10,
     },
     phone: {
-      description: "Full phone detail returned by getPhone, keyed by phone name",
+      description:
+        "Full phone detail returned by getPhone, keyed by phone name",
       schema: PhoneDetailSchema,
       lifetime: "infinite",
       garbageCollection: 10,
@@ -296,15 +307,23 @@ export const model = {
         returnedTags: z
           .array(z.string())
           .default(DEFAULT_RETURNED_TAGS)
-          .describe("LPhone fields to return. Defaults to a practical core set."),
-        skip: z.number().int().nonnegative().optional().describe("Pagination offset"),
-        first: z.number().int().positive().optional().describe("Max records to return"),
+          .describe(
+            "LPhone fields to return. Defaults to a practical core set.",
+          ),
+        skip: z.number().int().nonnegative().optional().describe(
+          "Pagination offset",
+        ),
+        first: z.number().int().positive().optional().describe(
+          "Max records to return",
+        ),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
 
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { searchCriteria, returnedTags, skip, first } = args;
@@ -341,12 +360,20 @@ ${tagsLines}
 ${paginationLines}
     </axl:listPhone>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "listPhone", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "listPhone",
+          bodyInner,
+        );
 
         const phones: unknown[] =
           parsed?.Envelope?.Body?.listPhoneResponse?.return?.phone ?? [];
 
-        const normalized = (phones as Record<string, unknown>[]).map(normalizePhone);
+        const normalized = (phones as Record<string, unknown>[]).map(
+          normalizePhone,
+        );
 
         context.logger.info(`listPhone returned ${normalized.length} phones`);
 
@@ -364,13 +391,19 @@ ${paginationLines}
       description:
         "Get full details of a single phone by name or UUID. Stores result keyed by phone name.",
       arguments: z.object({
-        name: z.string().optional().describe("Device name (e.g. SEP000C30F01E48)"),
+        name: z.string().optional().describe(
+          "Device name (e.g. SEP000C30F01E48)",
+        ),
         uuid: z.string().optional().describe("Phone UUID"),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         // XSD requires xsd:choice — send name or uuid, not both
@@ -382,7 +415,13 @@ ${paginationLines}
 ${lookup}
     </axl:getPhone>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "getPhone", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "getPhone",
+          bodyInner,
+        );
 
         const raw = parsed?.Envelope?.Body?.getPhoneResponse?.return?.phone;
         if (!raw || typeof raw !== "object") {
@@ -394,22 +433,35 @@ ${lookup}
 
         context.logger.info(`getPhone returned phone "${instanceName}"`);
 
-        const handle = await context.writeResource("phone", instanceName, phone);
+        const handle = await context.writeResource(
+          "phone",
+          instanceName,
+          phone,
+        );
         return { dataHandles: [handle] };
       },
     },
 
     addPhone: {
-      description: "Add a new phone to CUCM. Stores the created phone record afterwards.",
+      description:
+        "Add a new phone to CUCM. Stores the created phone record afterwards.",
       arguments: z.object({
         // Required by XPhone
         name: z.string().describe("Device name (e.g. SEP001122334455)"),
-        product: z.string().describe("Product type (e.g. 'Cisco 8861', 'Cisco IP Communicator')"),
-        class: z.string().default("Phone").describe("Device class — almost always 'Phone'"),
+        product: z.string().describe(
+          "Product type (e.g. 'Cisco 8861', 'Cisco IP Communicator')",
+        ),
+        class: z.string().default("Phone").describe(
+          "Device class — almost always 'Phone'",
+        ),
         protocol: z.string().describe("Protocol: 'SIP' or 'SCCP'"),
-        protocolSide: z.string().default("User").describe("Protocol side — almost always 'User'"),
+        protocolSide: z.string().default("User").describe(
+          "Protocol side — almost always 'User'",
+        ),
         devicePoolName: z.string().describe("Device pool name"),
-        commonPhoneConfigName: z.string().default("Standard Common Phone Profile"),
+        commonPhoneConfigName: z.string().default(
+          "Standard Common Phone Profile",
+        ),
         locationName: z.string().default("Hub_None"),
         useTrustedRelayPoint: z.string().default("Default"),
         phoneTemplateName: z.string().describe("Phone button template name"),
@@ -427,19 +479,29 @@ ${lookup}
         allowCtiControlFlag: z.boolean().default(true),
         lines: z.array(z.object({
           index: z.number().int().min(1).describe("Button index (1-based)"),
-          pattern: z.string().describe("Directory number pattern (e.g. '1001')"),
-          routePartitionName: z.string().nullable().default(null).describe("Route partition (null for none)"),
-          label: z.string().optional().describe("Line label shown on phone display"),
+          pattern: z.string().describe(
+            "Directory number pattern (e.g. '1001')",
+          ),
+          routePartitionName: z.string().nullable().default(null).describe(
+            "Route partition (null for none)",
+          ),
+          label: z.string().optional().describe(
+            "Line label shown on phone display",
+          ),
           display: z.string().optional().describe("Caller ID display name"),
-          displayAscii: z.string().optional().describe("ASCII version of display name"),
+          displayAscii: z.string().optional().describe(
+            "ASCII version of display name",
+          ),
           maxNumCalls: z.number().int().default(2),
           busyTrigger: z.number().int().default(1),
         })).optional().describe("Lines (DNs) to assign to the phone"),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         // Helper: build a nullable FK element
@@ -452,25 +514,45 @@ ${lookup}
         // Build <lines> block if provided
         const linesXml = args.lines && args.lines.length > 0
           ? `        <lines>
-${args.lines.map((l) => `          <line>
+${
+            args.lines.map((l) =>
+              `          <line>
             <index>${l.index}</index>
-${l.label !== undefined ? `            <label>${l.label}</label>` : ""}
+${
+                l.label !== undefined
+                  ? `            <label>${l.label}</label>`
+                  : ""
+              }
 ${l.display !== undefined ? `            <display>${l.display}</display>` : ""}
-${l.displayAscii !== undefined ? `            <displayAscii>${l.displayAscii}</displayAscii>` : ""}
+${
+                l.displayAscii !== undefined
+                  ? `            <displayAscii>${l.displayAscii}</displayAscii>`
+                  : ""
+              }
             <dirn>
               <pattern>${l.pattern}</pattern>
-              ${l.routePartitionName ? `<routePartitionName>${l.routePartitionName}</routePartitionName>` : `<routePartitionName xsi:nil="true"/>`}
+              ${
+                l.routePartitionName
+                  ? `<routePartitionName>${l.routePartitionName}</routePartitionName>`
+                  : `<routePartitionName xsi:nil="true"/>`
+              }
             </dirn>
             <maxNumCalls>${l.maxNumCalls}</maxNumCalls>
             <busyTrigger>${l.busyTrigger}</busyTrigger>
-          </line>`).join("\n")}
+          </line>`
+            ).join("\n")
+          }
         </lines>`
           : "";
 
         const bodyInner = `    <axl:addPhone sequence="1">
       <phone>
         <name>${args.name}</name>
-${args.description !== undefined ? `        <description>${args.description}</description>` : ""}
+${
+          args.description !== undefined
+            ? `        <description>${args.description}</description>`
+            : ""
+        }
         <product>${args.product}</product>
         <class>${args.class}</class>
         <protocol>${args.protocol}</protocol>
@@ -481,7 +563,11 @@ ${fkEl("commonDeviceConfigName", args.commonDeviceConfigName)}
         <commonPhoneConfigName>${args.commonPhoneConfigName}</commonPhoneConfigName>
         <locationName>${args.locationName}</locationName>
         <useTrustedRelayPoint>${args.useTrustedRelayPoint}</useTrustedRelayPoint>
-${args.securityProfileName !== undefined ? `        <securityProfileName>${args.securityProfileName}</securityProfileName>` : ""}
+${
+          args.securityProfileName !== undefined
+            ? `        <securityProfileName>${args.securityProfileName}</securityProfileName>`
+            : ""
+        }
 ${fkEl("sipProfileName", args.sipProfileName)}
         <phoneTemplateName>${args.phoneTemplateName}</phoneTemplateName>
 ${linesXml}
@@ -495,13 +581,26 @@ ${fkEl("ownerUserName", args.ownerUserName)}
       </phone>
     </axl:addPhone>`;
 
-        const result = await soapRequest(host, auth, axlVersion, "addPhone", bodyInner);
-        const newUuid = result?.Envelope?.Body?.addPhoneResponse?.return?.["#text"] ?? result?.Envelope?.Body?.addPhoneResponse?.return;
-        context.logger.info(`addPhone created phone "${args.name}" with UUID ${newUuid}`);
+        const result = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "addPhone",
+          bodyInner,
+        );
+        const newUuid =
+          result?.Envelope?.Body?.addPhoneResponse?.return?.["#text"] ??
+            result?.Envelope?.Body?.addPhoneResponse?.return;
+        context.logger.info(
+          `addPhone created phone "${args.name}" with UUID ${newUuid}`,
+        );
 
         // Fetch and store the full phone record
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getPhone",
+          host,
+          auth,
+          axlVersion,
+          "getPhone",
           `    <axl:getPhone sequence="1">\n      <name>${args.name}</name>\n    </axl:getPhone>`,
         );
         const raw = refreshed?.Envelope?.Body?.getPhoneResponse?.return?.phone;
@@ -521,23 +620,49 @@ ${fkEl("ownerUserName", args.ownerUserName)}
         newName: z.string().optional().describe("Rename the device"),
         description: z.string().optional().describe("Device description"),
         devicePoolName: z.string().optional().describe("Device pool name"),
-        callingSearchSpaceName: z.string().nullable().optional().describe("CSS name (null to clear)"),
+        callingSearchSpaceName: z.string().nullable().optional().describe(
+          "CSS name (null to clear)",
+        ),
         locationName: z.string().optional().describe("Location name"),
-        commonDeviceConfigName: z.string().nullable().optional().describe("Common device config name (null to clear)"),
-        commonPhoneConfigName: z.string().optional().describe("Common phone config name"),
-        securityProfileName: z.string().optional().describe("Security profile name"),
-        sipProfileName: z.string().nullable().optional().describe("SIP profile name (null to clear)"),
-        phoneTemplateName: z.string().optional().describe("Phone button template name"),
-        softkeyTemplateName: z.string().nullable().optional().describe("Softkey template name (null to clear)"),
-        ownerUserName: z.string().nullable().optional().describe("Owner user ID (null to clear)"),
-        enableExtensionMobility: z.boolean().optional().describe("Enable Extension Mobility"),
-        allowCtiControlFlag: z.boolean().optional().describe("Allow CTI control"),
-        isActive: z.boolean().optional().describe("Whether the device consumes a license"),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+        commonDeviceConfigName: z.string().nullable().optional().describe(
+          "Common device config name (null to clear)",
+        ),
+        commonPhoneConfigName: z.string().optional().describe(
+          "Common phone config name",
+        ),
+        securityProfileName: z.string().optional().describe(
+          "Security profile name",
+        ),
+        sipProfileName: z.string().nullable().optional().describe(
+          "SIP profile name (null to clear)",
+        ),
+        phoneTemplateName: z.string().optional().describe(
+          "Phone button template name",
+        ),
+        softkeyTemplateName: z.string().nullable().optional().describe(
+          "Softkey template name (null to clear)",
+        ),
+        ownerUserName: z.string().nullable().optional().describe(
+          "Owner user ID (null to clear)",
+        ),
+        enableExtensionMobility: z.boolean().optional().describe(
+          "Enable Extension Mobility",
+        ),
+        allowCtiControlFlag: z.boolean().optional().describe(
+          "Allow CTI control",
+        ),
+        isActive: z.boolean().optional().describe(
+          "Whether the device consumes a license",
+        ),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { name, uuid, ...fields } = args;
@@ -575,17 +700,27 @@ ${fieldLines}
           : `      <uuid>${lookupUuid}</uuid>`;
 
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getPhone",
+          host,
+          auth,
+          axlVersion,
+          "getPhone",
           `    <axl:getPhone sequence="1">\n${refreshLookup}\n    </axl:getPhone>`,
         );
 
         const raw = refreshed?.Envelope?.Body?.getPhoneResponse?.return?.phone;
         const phone = normalizePhone((raw ?? {}) as Record<string, unknown>);
-        const instanceName = (phone.name as string) ?? lookupName ?? lookupUuid ?? "unknown";
+        const instanceName = (phone.name as string) ?? lookupName ??
+          lookupUuid ?? "unknown";
 
-        context.logger.info(`updatePhone succeeded, refreshed "${instanceName}"`);
+        context.logger.info(
+          `updatePhone succeeded, refreshed "${instanceName}"`,
+        );
 
-        const handle = await context.writeResource("phone", instanceName, phone);
+        const handle = await context.writeResource(
+          "phone",
+          instanceName,
+          phone,
+        );
         return { dataHandles: [handle] };
       },
     },
@@ -593,13 +728,19 @@ ${fieldLines}
     removePhone: {
       description: "Remove a phone from CUCM by name or UUID.",
       arguments: z.object({
-        name: z.string().optional().describe("Device name (e.g. SEP001122334455)"),
+        name: z.string().optional().describe(
+          "Device name (e.g. SEP001122334455)",
+        ),
         uuid: z.string().optional().describe("Phone UUID"),
-      }).refine((a) => a.name || a.uuid, { message: "Either name or uuid is required" }),
+      }).refine((a) => a.name || a.uuid, {
+        message: "Either name or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const lookup = args.name

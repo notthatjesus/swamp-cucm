@@ -1,6 +1,6 @@
 import { z } from "npm:zod@4";
 import { XMLParser } from "npm:fast-xml-parser@4.5.0";
-import { fetch, Agent } from "npm:undici@5.28.4";
+import { Agent, fetch } from "npm:undici@5.28.4";
 
 // ─── Schemas ────────────────────────────────────────────────────────────────
 
@@ -33,7 +33,10 @@ const UserSchema = z
     department: z.string().nullable().optional(),
     manager: z.string().nullable().optional(),
     primaryExtension: z
-      .object({ pattern: z.string().optional(), routePartitionName: z.string().nullable().optional() })
+      .object({
+        pattern: z.string().optional(),
+        routePartitionName: z.string().nullable().optional(),
+      })
       .nullable()
       .optional(),
     enableCti: z.boolean().optional(),
@@ -60,7 +63,10 @@ const UserDetailSchema = z
     department: z.string().nullable().optional(),
     manager: z.string().nullable().optional(),
     primaryExtension: z
-      .object({ pattern: z.string().optional(), routePartitionName: z.string().nullable().optional() })
+      .object({
+        pattern: z.string().optional(),
+        routePartitionName: z.string().nullable().optional(),
+      })
       .nullable()
       .optional(),
     associatedDevices: z
@@ -131,7 +137,9 @@ function basicAuth(username: string, password: string) {
   return `Basic ${btoa(`${username}:${password}`)}`;
 }
 
-function normalizeFk(v: unknown): { name: string | null; uuid: string | null } | null {
+function normalizeFk(
+  v: unknown,
+): { name: string | null; uuid: string | null } | null {
   if (v === null || v === undefined) return null;
   if (typeof v === "string") return { name: v || null, uuid: null };
   if (typeof v === "object") {
@@ -183,7 +191,9 @@ async function soapRequest(
   bodyInner: string,
 ): Promise<Record<string, unknown>> {
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${axlNs(version)}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<soapenv:Envelope xmlns:soapenv="${SOAP_NS}" xmlns:axl="${
+    axlNs(version)
+  }" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <soapenv:Header/>
   <soapenv:Body>
 ${bodyInner}
@@ -205,8 +215,7 @@ ${bodyInner}
 
   if (!res.ok) {
     const parsed = XML_PARSER.parse(text);
-    const fault =
-      parsed?.Envelope?.Body?.Fault?.faultstring ??
+    const fault = parsed?.Envelope?.Body?.Fault?.faultstring ??
       parsed?.Envelope?.Body?.Fault?.detail?.axlError?.axlmessage ??
       text;
     throw new Error(`AXL ${action} failed (HTTP ${res.status}): ${fault}`);
@@ -216,9 +225,15 @@ ${bodyInner}
 }
 
 async function discoverVersion(host: string, auth: string): Promise<string> {
-  const parsed = await soapRequest(host, auth, "15.0", "getCCMVersion", `    <axl:getCCMVersion/>`);
-  const versionStr =
-    parsed?.Envelope?.Body?.getCCMVersionResponse?.return?.componentVersion?.version;
+  const parsed = await soapRequest(
+    host,
+    auth,
+    "15.0",
+    "getCCMVersion",
+    `    <axl:getCCMVersion/>`,
+  );
+  const versionStr = parsed?.Envelope?.Body?.getCCMVersionResponse?.return
+    ?.componentVersion?.version;
   if (typeof versionStr !== "string" || !versionStr) {
     throw new Error("getCCMVersion returned no version string");
   }
@@ -231,7 +246,7 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/user",
-  version: "2026.04.06.1",
+  version: "2026.04.07.1",
   globalArguments: GlobalArgsSchema,
   resources: {
     users: {
@@ -264,14 +279,22 @@ export const model = {
         returnedTags: z
           .array(z.string())
           .default(DEFAULT_RETURNED_TAGS)
-          .describe("LUser fields to return. Defaults to a practical core set."),
-        skip: z.number().int().nonnegative().optional().describe("Pagination offset"),
-        first: z.number().int().positive().optional().describe("Max records to return"),
+          .describe(
+            "LUser fields to return. Defaults to a practical core set.",
+          ),
+        skip: z.number().int().nonnegative().optional().describe(
+          "Pagination offset",
+        ),
+        first: z.number().int().positive().optional().describe(
+          "Max records to return",
+        ),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const { searchCriteria, returnedTags, skip, first } = args;
@@ -306,12 +329,20 @@ ${tagsLines}
 ${paginationLines}
     </axl:listUser>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "listUser", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "listUser",
+          bodyInner,
+        );
 
         const users: unknown[] =
           parsed?.Envelope?.Body?.listUserResponse?.return?.user ?? [];
 
-        const normalized = (users as Record<string, unknown>[]).map(normalizeUser);
+        const normalized = (users as Record<string, unknown>[]).map(
+          normalizeUser,
+        );
         context.logger.info(`listUser returned ${normalized.length} users`);
 
         const handle = await context.writeResource("users", "main", {
@@ -330,11 +361,15 @@ ${paginationLines}
       arguments: z.object({
         userid: z.string().optional().describe("User ID (login name)"),
         uuid: z.string().optional().describe("User UUID"),
-      }).refine((a) => a.userid || a.uuid, { message: "Either userid or uuid is required" }),
+      }).refine((a) => a.userid || a.uuid, {
+        message: "Either userid or uuid is required",
+      }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const lookup = args.userid
@@ -345,7 +380,13 @@ ${paginationLines}
 ${lookup}
     </axl:getUser>`;
 
-        const parsed = await soapRequest(host, auth, axlVersion, "getUser", bodyInner);
+        const parsed = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "getUser",
+          bodyInner,
+        );
 
         const raw = parsed?.Envelope?.Body?.getUserResponse?.return?.user;
         if (!raw || typeof raw !== "object") {
@@ -353,7 +394,8 @@ ${lookup}
         }
 
         const user = normalizeUser(raw as Record<string, unknown>);
-        const instanceName = (user.userid as string) ?? args.userid ?? args.uuid ?? "unknown";
+        const instanceName = (user.userid as string) ?? args.userid ??
+          args.uuid ?? "unknown";
 
         context.logger.info(`getUser returned user "${instanceName}"`);
 
@@ -368,7 +410,8 @@ ${lookup}
         // Required by XUser
         userid: z.string().describe("Unique user ID (login name)"),
         lastName: z.string().describe("Last name"),
-        presenceGroupName: z.string().default("Standard Presence group").describe("Presence group name"),
+        presenceGroupName: z.string().default("Standard Presence group")
+          .describe("Presence group name"),
         // Optional common fields
         firstName: z.string().optional(),
         middleName: z.string().optional(),
@@ -378,11 +421,15 @@ ${lookup}
         manager: z.string().optional(),
         password: z.string().optional().describe("Web application password"),
         pin: z.string().optional().describe("Phone PIN"),
-        telephoneNumber: z.string().optional().describe("Phone number shown in directory"),
+        telephoneNumber: z.string().optional().describe(
+          "Phone number shown in directory",
+        ),
         title: z.string().optional(),
         mobileNumber: z.string().optional(),
         homeNumber: z.string().optional(),
-        directoryUri: z.string().optional().describe("URI (user@domain format)"),
+        directoryUri: z.string().optional().describe(
+          "URI (user@domain format)",
+        ),
         enableCti: z.boolean().default(true),
         enableMobility: z.boolean().default(false),
         enableMobileVoiceAccess: z.boolean().default(false),
@@ -401,9 +448,11 @@ ${lookup}
           .describe("Primary extension DN"),
       }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const optEl = (tag: string, value: string | undefined) =>
@@ -415,16 +464,22 @@ ${lookup}
         const devicesXml =
           args.associatedDevices && args.associatedDevices.length > 0
             ? `        <associatedDevices>
-${args.associatedDevices.map((d) => `          <device>${d}</device>`).join("\n")}
+${
+              args.associatedDevices.map((d) =>
+                `          <device>${d}</device>`
+              ).join("\n")
+            }
         </associatedDevices>`
             : "";
 
         const primaryExtXml = args.primaryExtension
           ? `        <primaryExtension>
           <pattern>${args.primaryExtension.pattern}</pattern>
-          ${args.primaryExtension.routePartitionName
-            ? `<routePartitionName>${args.primaryExtension.routePartitionName}</routePartitionName>`
-            : `<routePartitionName xsi:nil="true"/>`}
+          ${
+            args.primaryExtension.routePartitionName
+              ? `<routePartitionName>${args.primaryExtension.routePartitionName}</routePartitionName>`
+              : `<routePartitionName xsi:nil="true"/>`
+          }
         </primaryExtension>`
           : "";
 
@@ -456,15 +511,26 @@ ${primaryExtXml}
       </user>
     </axl:addUser>`;
 
-        const result = await soapRequest(host, auth, axlVersion, "addUser", bodyInner);
+        const result = await soapRequest(
+          host,
+          auth,
+          axlVersion,
+          "addUser",
+          bodyInner,
+        );
         const newUuid =
           result?.Envelope?.Body?.addUserResponse?.return?.["#text"] ??
-          result?.Envelope?.Body?.addUserResponse?.return;
-        context.logger.info(`addUser created user "${args.userid}" with UUID ${newUuid}`);
+            result?.Envelope?.Body?.addUserResponse?.return;
+        context.logger.info(
+          `addUser created user "${args.userid}" with UUID ${newUuid}`,
+        );
 
         // Fetch and store the full user record
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getUser",
+          host,
+          auth,
+          axlVersion,
+          "getUser",
           `    <axl:getUser sequence="1">\n      <userid>${args.userid}</userid>\n    </axl:getUser>`,
         );
         const raw = refreshed?.Envelope?.Body?.getUserResponse?.return?.user;
@@ -514,15 +580,25 @@ ${primaryExtXml}
             })
             .optional(),
         })
-        .refine((a) => a.userid || a.uuid, { message: "Either userid or uuid is required" }),
+        .refine((a) => a.userid || a.uuid, {
+          message: "Either userid or uuid is required",
+        }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
-        const { userid, uuid, newUserid, associatedDevices, primaryExtension, ...scalarFields } =
-          args;
+        const {
+          userid,
+          uuid,
+          newUserid,
+          associatedDevices,
+          primaryExtension,
+          ...scalarFields
+        } = args;
 
         const lookup = userid
           ? `      <userid>${userid}</userid>`
@@ -537,23 +613,26 @@ ${primaryExtXml}
           })
           .join("\n");
 
-        const renameLine = newUserid ? `      <newUserid>${newUserid}</newUserid>` : "";
+        const renameLine = newUserid
+          ? `      <newUserid>${newUserid}</newUserid>`
+          : "";
 
-        const devicesXml =
-          associatedDevices !== undefined
-            ? associatedDevices.length > 0
-              ? `      <associatedDevices>
+        const devicesXml = associatedDevices !== undefined
+          ? associatedDevices.length > 0
+            ? `      <associatedDevices>
 ${associatedDevices.map((d) => `        <device>${d}</device>`).join("\n")}
       </associatedDevices>`
-              : `      <associatedDevices/>`
-            : "";
+            : `      <associatedDevices/>`
+          : "";
 
         const primaryExtXml = primaryExtension
           ? `      <primaryExtension>
         <pattern>${primaryExtension.pattern}</pattern>
-        ${primaryExtension.routePartitionName
-          ? `<routePartitionName>${primaryExtension.routePartitionName}</routePartitionName>`
-          : `<routePartitionName xsi:nil="true"/>`}
+        ${
+            primaryExtension.routePartitionName
+              ? `<routePartitionName>${primaryExtension.routePartitionName}</routePartitionName>`
+              : `<routePartitionName xsi:nil="true"/>`
+          }
       </primaryExtension>`
           : "";
 
@@ -573,15 +652,21 @@ ${primaryExtXml}
           : `      <uuid>${uuid}</uuid>`;
 
         const refreshed = await soapRequest(
-          host, auth, axlVersion, "getUser",
+          host,
+          auth,
+          axlVersion,
+          "getUser",
           `    <axl:getUser sequence="1">\n${refreshLookup}\n    </axl:getUser>`,
         );
 
         const raw = refreshed?.Envelope?.Body?.getUserResponse?.return?.user;
         const user = normalizeUser((raw ?? {}) as Record<string, unknown>);
-        const instanceName = (user.userid as string) ?? refreshUserId ?? "unknown";
+        const instanceName = (user.userid as string) ?? refreshUserId ??
+          "unknown";
 
-        context.logger.info(`updateUser succeeded, refreshed "${instanceName}"`);
+        context.logger.info(
+          `updateUser succeeded, refreshed "${instanceName}"`,
+        );
 
         const handle = await context.writeResource("user", instanceName, user);
         return { dataHandles: [handle] };
@@ -595,11 +680,15 @@ ${primaryExtXml}
           userid: z.string().optional().describe("User ID"),
           uuid: z.string().optional().describe("User UUID"),
         })
-        .refine((a) => a.userid || a.uuid, { message: "Either userid or uuid is required" }),
+        .refine((a) => a.userid || a.uuid, {
+          message: "Either userid or uuid is required",
+        }),
       execute: async (args, context) => {
-        const { host, username, password, version: configuredVersion } = context.globalArgs;
+        const { host, username, password, version: configuredVersion } =
+          context.globalArgs;
         const auth = basicAuth(username, password);
-        const axlVersion = configuredVersion ?? (await discoverVersion(host, auth));
+        const axlVersion = configuredVersion ??
+          (await discoverVersion(host, auth));
         context.logger.info(`Using AXL version ${axlVersion}`);
 
         const lookup = args.userid

@@ -1,0 +1,17 @@
+manifestVersion: 1
+name: "@notthatjesus/cisco-unified-communications-manager"
+version: "2026.04.07.1"
+description: "Cisco Unified Communications Manager (CUCM) automation via the AXL SOAP API. Manage phones, directory numbers, end users, and device profiles."
+models:
+  - phones.ts
+  - lines.ts
+  - users.ts
+  - device_profiles.ts
+additionalFiles:
+  - README.md
+labels:
+  - cisco
+  - cucm
+  - voip
+  - telephony
+  - axl
