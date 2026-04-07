@@ -221,7 +221,7 @@ function lineInstanceName(
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/line",
-  version: "2026.04.07.1",
+  version: "2026.04.07.2",
   globalArguments: GlobalArgsSchema,
   resources: {
     lines: {

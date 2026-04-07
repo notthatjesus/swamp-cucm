@@ -1,7 +1,7 @@
 manifestVersion: 1
 name: "@notthatjesus/cisco-unified-communications-manager"
-version: "2026.04.07.1"
-description: "Cisco Unified Communications Manager (CUCM) automation via the AXL SOAP API. Manage phones, directory numbers, end users, and device profiles."
+version: "2026.04.07.2"
+description: "Cisco Unified Communications Manager (CUCM) automation via the AXL SOAP API. Manage phones, directory numbers, end users, and device profiles. https://github.com/notthatjesus/swamp-cucm"
 models:
   - phones.ts
   - lines.ts
