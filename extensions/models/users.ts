@@ -246,7 +246,22 @@ async function discoverVersion(host: string, auth: string): Promise<string> {
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/user",
-  version: "2026.04.07.3",
+  version: "2026.04.07.5",
+  upgrades: [
+    {
+      fromVersion: "2026.04.07.3",
+      toVersion: "2026.04.07.4",
+      description: "No-op upgrade to trigger registry re-index",
+      upgradeAttributes: (old) => old,
+    },
+    {
+      fromVersion: "2026.04.07.4",
+      toVersion: "2026.04.07.5",
+      description:
+        "Align argument schema formatting for registry parameter display",
+      upgradeAttributes: (old) => old,
+    },
+  ],
   globalArguments: GlobalArgsSchema,
   resources: {
     users: {
@@ -544,45 +559,40 @@ ${primaryExtXml}
     updateUser: {
       description:
         "Update an end user in CUCM AXL. Identify by userid or UUID. Only provided fields are updated. Refreshes stored user record afterwards.",
-      arguments: z
-        .object({
-          userid: z.string().optional().describe("Current user ID"),
-          uuid: z.string().optional().describe("User UUID"),
-          newUserid: z.string().optional().describe("Rename the user ID"),
-          firstName: z.string().optional(),
-          middleName: z.string().optional(),
-          lastName: z.string().optional(),
-          displayName: z.string().optional(),
-          mailid: z.string().optional(),
-          department: z.string().optional(),
-          manager: z.string().optional(),
-          password: z.string().optional(),
-          pin: z.string().optional(),
-          telephoneNumber: z.string().nullable().optional(),
-          title: z.string().nullable().optional(),
-          mobileNumber: z.string().nullable().optional(),
-          homeNumber: z.string().nullable().optional(),
-          directoryUri: z.string().nullable().optional(),
-          presenceGroupName: z.string().optional(),
-          enableCti: z.boolean().optional(),
-          enableMobility: z.boolean().optional(),
-          enableMobileVoiceAccess: z.boolean().optional(),
-          imAndPresenceEnable: z.boolean().optional(),
-          homeCluster: z.boolean().optional(),
-          associatedDevices: z
-            .array(z.string())
-            .optional()
-            .describe("Full replacement list of associated device names"),
-          primaryExtension: z
-            .object({
-              pattern: z.string(),
-              routePartitionName: z.string().nullable().default(null),
-            })
-            .optional(),
-        })
-        .refine((a) => a.userid || a.uuid, {
-          message: "Either userid or uuid is required",
-        }),
+      arguments: z.object({
+        userid: z.string().optional().describe("Current user ID"),
+        uuid: z.string().optional().describe("User UUID"),
+        newUserid: z.string().optional().describe("Rename the user ID"),
+        firstName: z.string().optional(),
+        middleName: z.string().optional(),
+        lastName: z.string().optional(),
+        displayName: z.string().optional(),
+        mailid: z.string().optional(),
+        department: z.string().optional(),
+        manager: z.string().optional(),
+        password: z.string().optional(),
+        pin: z.string().optional(),
+        telephoneNumber: z.string().nullable().optional(),
+        title: z.string().nullable().optional(),
+        mobileNumber: z.string().nullable().optional(),
+        homeNumber: z.string().nullable().optional(),
+        directoryUri: z.string().nullable().optional(),
+        presenceGroupName: z.string().optional(),
+        enableCti: z.boolean().optional(),
+        enableMobility: z.boolean().optional(),
+        enableMobileVoiceAccess: z.boolean().optional(),
+        imAndPresenceEnable: z.boolean().optional(),
+        homeCluster: z.boolean().optional(),
+        associatedDevices: z.array(z.string()).optional().describe(
+          "Full replacement list of associated device names",
+        ),
+        primaryExtension: z.object({
+          pattern: z.string(),
+          routePartitionName: z.string().nullable().default(null),
+        }).optional(),
+      }).refine((a) => a.userid || a.uuid, {
+        message: "Either userid or uuid is required",
+      }),
       execute: async (args, context) => {
         const { host, username, password, version: configuredVersion } =
           context.globalArgs;
@@ -675,14 +685,12 @@ ${primaryExtXml}
 
     removeUser: {
       description: "Remove an end user from CUCM by userid or UUID.",
-      arguments: z
-        .object({
-          userid: z.string().optional().describe("User ID"),
-          uuid: z.string().optional().describe("User UUID"),
-        })
-        .refine((a) => a.userid || a.uuid, {
-          message: "Either userid or uuid is required",
-        }),
+      arguments: z.object({
+        userid: z.string().optional().describe("User ID"),
+        uuid: z.string().optional().describe("User UUID"),
+      }).refine((a) => a.userid || a.uuid, {
+        message: "Either userid or uuid is required",
+      }),
       execute: async (args, context) => {
         const { host, username, password, version: configuredVersion } =
           context.globalArgs;

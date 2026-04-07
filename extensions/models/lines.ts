@@ -221,7 +221,7 @@ function lineInstanceName(
 
 export const model = {
   type: "@notthatjesus/cisco-unified-communications-manager/line",
-  version: "2026.04.07.3",
+  version: "2026.04.07.4",
   globalArguments: GlobalArgsSchema,
   resources: {
     lines: {
@@ -512,37 +512,31 @@ ${args.active !== undefined ? `        <active>${args.active}</active>` : ""}
     updateLine: {
       description:
         "Update a directory number in CUCM AXL. Identify by pattern+partition or UUID. Only provided fields are updated. Refreshes stored line record afterwards.",
-      arguments: z.intersection(
-        z.union([
-          z.object({
-            pattern: z.string().describe("Current DN pattern"),
-            routePartitionName: z
-              .string()
-              .nullable()
-              .optional()
-              .describe("Route partition (null for none)"),
-          }),
-          z.object({
-            uuid: z.string().describe("Line UUID"),
-          }),
-        ]),
-        z.object({
-          newPattern: z.string().optional().describe("New DN pattern (rename)"),
-          newRoutePartitionName: z
-            .string()
-            .nullable()
-            .optional()
-            .describe("New route partition name (null to clear)"),
-          description: z.string().optional(),
-          alertingName: z.string().optional(),
-          asciiAlertingName: z.string().optional(),
-          presenceGroupName: z.string().nullable().optional(),
-          shareLineAppearanceCssName: z.string().nullable().optional(),
-          voiceMailProfileName: z.string().nullable().optional(),
-          autoAnswer: z.string().optional(),
-          active: z.boolean().optional(),
-        }),
-      ),
+      arguments: z.object({
+        pattern: z.string().optional().describe("Current DN pattern"),
+        routePartitionName: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Route partition (null for none)"),
+        uuid: z.string().optional().describe("Line UUID"),
+        newPattern: z.string().optional().describe("New DN pattern (rename)"),
+        newRoutePartitionName: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("New route partition name (null to clear)"),
+        description: z.string().optional(),
+        alertingName: z.string().optional(),
+        asciiAlertingName: z.string().optional(),
+        presenceGroupName: z.string().nullable().optional(),
+        shareLineAppearanceCssName: z.string().nullable().optional(),
+        voiceMailProfileName: z.string().nullable().optional(),
+        autoAnswer: z.string().optional(),
+        active: z.boolean().optional(),
+      }).refine((a) => a.pattern || a.uuid, {
+        message: "Either pattern or uuid is required",
+      }),
       execute: async (args, context) => {
         const { host, username, password, version: configuredVersion } =
           context.globalArgs;
@@ -653,19 +647,17 @@ ${fieldLines}
     removeLine: {
       description:
         "Remove a directory number from CUCM by pattern+partition or UUID.",
-      arguments: z.union([
-        z.object({
-          pattern: z.string().describe("DN pattern (e.g. '1001')"),
-          routePartitionName: z
-            .string()
-            .nullable()
-            .optional()
-            .describe("Route partition name (null for none)"),
-        }),
-        z.object({
-          uuid: z.string().describe("Line UUID"),
-        }),
-      ]),
+      arguments: z.object({
+        pattern: z.string().optional().describe("DN pattern (e.g. '1001')"),
+        routePartitionName: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("Route partition name (null for none)"),
+        uuid: z.string().optional().describe("Line UUID"),
+      }).refine((a) => a.pattern || a.uuid, {
+        message: "Either pattern or uuid is required",
+      }),
       execute: async (args, context) => {
         const { host, username, password, version: configuredVersion } =
           context.globalArgs;
